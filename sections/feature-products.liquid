@@ -1,0 +1,227 @@
+
+<div class="feature-products" style="text-align:{{ section.settings.text_align }}">
+    <div class="page-width">
+        {% if section.settings.main-heading != blank %}
+            <h2>{{ section.settings.main-heading }}</h2>
+        {% endif %}
+        {% if section.settings.description != blank %}
+            <p class="main-description">{{ section.settings.description }}</p>
+        {% endif %}
+    </div>
+</div>
+<div class="feature-product-grid">
+  {% for block in section.blocks %}
+  {% assign product = all_products[block.settings.product] %}
+  {% if product %}
+    {% assign variant = product.selected_or_first_available_variant %}
+
+    <div class="product-card">
+      <a href="{{ product.url }}">
+        {% if product.featured_image %}
+          {{ product.featured_image | image_url: width: 400 | image_tag:
+            alt: product.title,
+            loading: 'lazy'
+          }}
+        {% endif %}
+
+        <h3>{{ product.title }}</h3>
+        <p class="price" data-price="{{ variant.price }}">{{ product.price | money }}</p>
+      </a>
+
+      <form method="post" action="/cart/add" class="featured-product-form" data-featured-product-form>
+        <input type="hidden" name="id" value="{{ variant.id }}">
+
+        <!-- Quantity selector -->
+        <div class="quantity-selector">
+          <button type="button" class="qty-btn" data-action="decrease">−</button>
+          <input
+            type="number"
+            name="quantity"
+            value="1"
+            min="1"
+            class="qty-input"
+          >
+          <button type="button" class="qty-btn" data-action="increase">+</button>
+        </div>
+
+        {% render 'add-to-cart-button',
+          product: product,
+          can_add_to_cart: variant.available,
+          add_to_cart_text: 'Add to cart',
+          class: 'add-to-cart-button'
+        %}
+    </form>
+    </div>
+  {% endif %}
+{% endfor %}
+</div>
+
+<style>
+    .main-description{
+        font-size:20px;
+    }
+    .feature-product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 30px;
+    margin-top: 40px;
+    }
+
+    .product-card {
+    padding: 20px;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    text-align: center;
+    }
+
+    .product-card img {
+    width: 100%;
+    height: auto;
+    margin-bottom: 15px;
+    }
+
+    .product-card h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+    }
+
+    .product-card .price {
+    font-size: 16px;
+    font-weight: 600;
+    }
+</style>
+{% javascript %}
+
+
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.qty-btn');
+    if (!btn) return;
+
+    const wrapper = btn.closest('.product-card');
+    const qtyInput = wrapper.querySelector('.qty-input');
+    const priceEl = wrapper.querySelector('.price');
+
+    let qty = parseInt(qtyInput.value, 10) || 1;
+    const basePrice = parseInt(priceEl.dataset.price, 10);
+
+    if (btn.dataset.action === 'increase') {
+        qty++;
+    }
+
+    if (btn.dataset.action === 'decrease' && qty > 1) {
+        qty--;
+    }
+
+    qtyInput.value = qty;
+
+    const updatedPrice = basePrice * qty;
+
+    priceEl.textContent = formatMoney(updatedPrice);
+    });
+
+    function formatMoney(cents) {
+    return (cents / 100).toLocaleString('en-IN', {
+        style: 'currency',
+        currency: 'INR'
+    });
+    }
+
+    document.addEventListener('submit', async function (e) {
+        const form = e.target.closest('[data-featured-product-form]');
+        if (!form) return;
+
+        e.preventDefault();
+
+        try {
+         
+            const addResponse = await fetch('/cart/add.js', {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { Accept: 'application/json' }
+            });
+
+            if (!addResponse.ok) throw addResponse;
+            await addResponse.json();
+
+            const cartResponse = await fetch('/cart.js');
+            const cart = await cartResponse.json();
+
+            console.log('Fresh cart:', cart);
+
+            const bubble = document.querySelector('.cart-bubble');
+            const bubbleCount = document.querySelector('.cart-bubble__text-count');
+
+            if (bubble && bubbleCount) {
+                const count = cart.item_count;
+
+                bubbleCount.textContent = count;
+
+                bubble.classList.toggle('visually-hidden', count === 0);
+                bubbleCount.classList.toggle('hidden', count === 0);
+            }
+
+            // document.dispatchEvent(
+            // new CustomEvent('cart:add', {
+            //     bubbles: true,
+            //     detail: { cart }
+            // })
+            // );
+
+            const drawer = document.querySelector('cart-drawer-component');
+            drawer?.open();
+
+        } catch (err) {
+            console.error('Add to cart failed:', err);
+        }
+    });
+
+{% endjavascript %}
+{% schema %}
+{
+    "name": "Feature Products",
+    "settings": [
+        {
+        "type": "text",
+        "id": "main-heading",
+        "label": "Heading"
+        },
+        {
+        "type": "select",
+        "id": "text_align",
+        "label": "Text Align",
+        "options": [
+            {"value": "left","label": "Left"},
+            {"value": "right","label": "Right"},
+            {"value": "center","label": "Center"}
+        ],
+        "default":"center"
+        },
+        {
+        "type": "textarea",
+        "id": "description",
+        "label": "Description"
+        }
+    ],
+    "blocks": [
+        {
+            "type": "product",
+            "name":"products",
+             "settings": [
+                {
+                    "type": "product",
+                    "id": "product",
+                    "label": "Select product"
+                }
+            ]
+        }
+    
+    ],
+    "presets": [
+        {
+            "name": "Feature Products",
+            "category" : "Custom"
+        }
+    ]
+}
+{% endschema %}
